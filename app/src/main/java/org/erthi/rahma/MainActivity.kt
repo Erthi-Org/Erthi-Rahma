@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MaterialTheme(colorScheme = darkColorScheme(primary = Green, background = Ink, surface = Color(0xFF1A1D1B))) {
-                    RahmaApp(onShare = { name, prayer ->
+                    RahmaApp(onShare = { name, prayer, selectedPhrase ->
                         shareObituary(name, prayer, selectedPhrase)
                     })
                 }
