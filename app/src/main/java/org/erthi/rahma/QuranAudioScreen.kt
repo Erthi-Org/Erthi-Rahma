@@ -2,6 +2,9 @@ package org.erthi.rahma
 
 import android.content.ComponentName
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
@@ -46,6 +49,35 @@ fun QuranAudioScreen() {
         onDispose {
             controller = null
             MediaController.releaseFuture(future)
+        }
+    }
+    DisposableEffect(controller) {
+        val c = controller
+        if (c == null) {
+            onDispose { }
+        } else {
+            val listener = object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    playing = isPlaying
+                    paused = !isPlaying && c.playbackState == Player.STATE_READY && c.mediaItemCount > 0
+                    if (isPlaying) status = "جارٍ التشغيل"
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    when (playbackState) {
+                        Player.STATE_BUFFERING -> status = "جارٍ تحميل التلاوة..."
+                        Player.STATE_ENDED -> { playing = false; paused = false; status = "انتهت السورة" }
+                        Player.STATE_READY -> if (!c.isPlaying && c.mediaItemCount > 0) status = "جاهز للتشغيل"
+                    }
+                }
+                override fun onPlayerError(error: PlaybackException) {
+                    playing = false
+                    paused = false
+                    status = "تعذر تشغيل التلاوة. تحقق من الاتصال أو المصدر."
+                }
+            }
+            c.addListener(listener)
+            playing = c.isPlaying
+            onDispose { c.removeListener(listener) }
         }
     }
     fun stop() {
@@ -104,7 +136,17 @@ fun QuranAudioScreen() {
                 status = "جارٍ التشغيل"
             } else if (reader.edition != null) {
                 val url = "https://cdn.islamic.network/quran/audio-surah/${reader.bitrate}/${reader.edition}/$surah.mp3"
-                c.setMediaItem(MediaItem.fromUri(url))
+                c.setMediaItem(
+                    MediaItem.Builder()
+                        .setUri(url)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle("سورة ${SurahCatalog.all[surah - 1].name}")
+                                .setArtist(reader.name)
+                                .setAlbumTitle("إرثي | رحمة — المصحف الصوتي")
+                                .build()
+                        ).build()
+                )
                 c.prepare()
                 c.play()
                 playing = true
