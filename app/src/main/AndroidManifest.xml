@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:allowBackup="false" android:label="إرثي رحمة"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:supportsRtl="true">
