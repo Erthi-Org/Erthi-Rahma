@@ -18,8 +18,23 @@ object SurahCatalog {
         "القارعة","التكاثر","العصر","الهمزة","الفيل","قريش","الماعون","الكوثر","الكافرون","النصر",
         "المسد","الإخلاص","الفلق","الناس"
     ).mapIndexed { index, name -> Surah(index + 1, name) }
+    private val arabicMarks = Regex("[\\p{M}ـ]")
+    private val spaces = Regex("\\s+")
+
+    private fun normalize(text: String): String =
+        arabicMarks.replace(text.trim(), "")
+            .replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
+            .replace('ى', 'ي')
+            .replace(spaces, " ")
+
+    private val normalizedNames = all.map { normalize(it.name) }
+
     fun search(query: String): List<Surah> {
-        val q = query.trim()
-        return if (q.isEmpty()) all else all.filter { it.name.contains(q, ignoreCase = true) || it.number.toString() == q }
+        val normalized = normalize(query)
+        if (normalized.isEmpty()) return all
+        val number = normalized.map { it.digitToIntOrNull()?.digitToChar() ?: it }
+            .joinToString("").toIntOrNull()
+        if (number != null) return listOfNotNull(all.getOrNull(number - 1))
+        return all.filterIndexed { index, _ -> normalizedNames[index].contains(normalized) }
     }
 }
