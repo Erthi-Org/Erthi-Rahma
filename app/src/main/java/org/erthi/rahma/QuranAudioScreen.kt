@@ -28,12 +28,14 @@ fun QuranAudioScreen() {
     var readerIndex by remember { mutableIntStateOf(0) }
     var surah by remember { mutableIntStateOf(1) }
     var playing by remember { mutableStateOf(false) }
+    var paused by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("اختر القارئ والسورة") }
     val player = remember { MediaPlayer() }
     DisposableEffect(Unit) { onDispose { player.release() } }
     fun stop() {
         player.reset()
         playing = false
+        paused = false
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -59,7 +61,18 @@ fun QuranAudioScreen() {
             if (playing) {
                 player.pause()
                 playing = false
+                paused = true
                 status = "متوقف مؤقتًا"
+            } else if (paused) {
+                try {
+                    player.start()
+                    playing = true
+                    paused = false
+                    status = "جارٍ التشغيل"
+                } catch (e: IllegalStateException) {
+                    stop()
+                    status = "تعذر استئناف التلاوة"
+                }
             } else if (reader.edition != null) {
                 try {
                     stop()
@@ -75,7 +88,7 @@ fun QuranAudioScreen() {
                 }
             }
         }, enabled = readers[readerIndex].edition != null) {
-            Text(if (playing) "إيقاف مؤقت" else "تشغيل السورة")
+            Text(if (playing) "إيقاف مؤقت" else if (paused) "استئناف التلاوة" else "تشغيل السورة")
         }
         Text(status)
         Text("التلاوات التي لم تتوفر لها موافقة ومصدر موثوق لا يمكن تشغيلها حاليًا.")
