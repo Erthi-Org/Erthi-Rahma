@@ -27,6 +27,7 @@ fun QuranAudioScreen() {
     }
     var readerIndex by remember { mutableIntStateOf(0) }
     var surah by remember { mutableIntStateOf(1) }
+    var search by remember { mutableStateOf("") }
     var playing by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("اختر القارئ والسورة") }
@@ -51,7 +52,21 @@ fun QuranAudioScreen() {
                 Text(reader.name + if (reader.edition == null) " — قريبًا" else " — متاح", modifier = Modifier.padding(top = 12.dp))
             }
         }
-        Text("رقم السورة: $surah من 114")
+        Text("السورة المختارة: ${SurahCatalog.all[surah - 1].name} ($surah/114)")
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it.take(60) },
+            label = { Text("ابحث عن سورة بالاسم أو الرقم") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        if (search.isNotBlank()) {
+            SurahCatalog.search(search).take(8).forEach { result ->
+                TextButton(onClick = { stop(); surah = result.number; search = "" }) {
+                    Text("${result.number} — ${result.name}")
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { stop(); surah = (surah - 1).coerceAtLeast(1) }, enabled = surah > 1) { Text("السابقة") }
             OutlinedButton(onClick = { stop(); surah = (surah + 1).coerceAtMost(114) }, enabled = surah < 114) { Text("التالية") }
