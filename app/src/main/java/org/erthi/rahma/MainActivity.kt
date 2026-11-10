@@ -20,6 +20,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -94,6 +97,32 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
     var prayer by remember { mutableStateOf("") }
     var selected by rememberSaveable { mutableStateOf(0) }
     var showPreview by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val draftDao = remember(context) { ObituaryDraftDatabase.open(context).drafts() }
+    val draftFlow = remember(draftDao) { draftDao.observe() }
+    val drafts by draftFlow.collectAsState(emptyList())
+    val scope = rememberCoroutineScope()
+    var draftId by remember { mutableLongStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<ObituaryDraft?>(null) }
+
+    fun writeDraft(success: String, operation: suspend () -> Unit) {
+        busy = true
+        scope.launch {
+            try {
+                operation()
+                message = success
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: android.database.SQLException) {
+                message = "تعذر حفظ التغيير. حاول مرة أخرى."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     val phrases = listOf("إنا لله وإنا إليه راجعون", "اللهم اغفر له وارحمه", "اللهم ارحمها واغفر لها")
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -128,6 +157,72 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
                 }
             }
             Button(onClick = { onShare(name, prayer, phrases[selected]) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة صورة النعي") }
+        }
+        OutlinedButton(
+            onClick = {
+                val draft = ObituaryDraft(draftId, name, prayer, selected, System.currentTimeMillis())
+                writeDraft("حُفظت المسودة على الجهاز") {
+                    val insertedId = draftDao.save(draft)
+                    draftId = if (draft.id == 0L) insertedId else draft.id
+                }
+            },
+            enabled = !busy && name.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (draftId == 0L) "حفظ مسودة محلية" else "حفظ تعديل المسودة") }
+        if (draftId != 0L) {
+            TextButton(onClick = {
+                draftId = 0
+                name = ""
+                prayer = ""
+                selected = 0
+                showPreview = false
+                message = ""
+            }, enabled = !busy) { Text("مسودة جديدة") }
+        }
+        if (message.isNotEmpty()) Text(message)
+        if (drafts.isNotEmpty()) Text("المسودات المحلية", style = MaterialTheme.typography.titleMedium)
+        drafts.forEach { draft ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(draft.name)
+                    Row {
+                        TextButton(onClick = {
+                            draftId = draft.id
+                            name = draft.name
+                            prayer = draft.details
+                            selected = draft.phraseIndex.coerceIn(phrases.indices)
+                            showPreview = false
+                            message = "فُتحت المسودة للتعديل"
+                        }, enabled = !busy) { Text("تعديل") }
+                        TextButton(onClick = { pendingDelete = draft }, enabled = !busy) { Text("حذف") }
+                    }
+                }
+            }
+        }
+        pendingDelete?.let { draft ->
+            AlertDialog(
+                onDismissRequest = { pendingDelete = null },
+                title = { Text("حذف المسودة؟") },
+                text = { Text(draft.name) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingDelete = null
+                        writeDraft("حُذفت المسودة") {
+                            draftDao.delete(draft.id)
+                            if (draftId == draft.id) {
+                                draftId = 0
+                                name = ""
+                                prayer = ""
+                                selected = 0
+                                showPreview = false
+                            }
+                        }
+                    }) { Text("حذف") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDelete = null }) { Text("إلغاء") }
+                }
+            )
         }
         Text("المشاركة اختيارية. لا تُرفع البيانات إلى أي خادم.", color = Color.Gray, fontSize = 12.sp)
     }
