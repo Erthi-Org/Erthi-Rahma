@@ -32,13 +32,19 @@ fun QuranAudioScreen() {
             Reader("السيد سعيد", null)
         )
     }
-    var readerIndex by remember { mutableIntStateOf(0) }
-    var surah by remember { mutableIntStateOf(1) }
+    val context = LocalContext.current
+    val progress = remember(context) { context.quranProgress() }
+    val savedId = remember(progress) { progress.getString(LAST_RECITATION, null).orEmpty() }
+    var readerIndex by remember {
+        mutableIntStateOf(readers.indexOfFirst { it.edition == savedId.substringBefore(':') }.coerceAtLeast(0))
+    }
+    var surah by remember {
+        mutableIntStateOf(savedId.substringAfter(':', "").toIntOrNull()?.takeIf { it in 1..114 } ?: 1)
+    }
     var search by remember { mutableStateOf("") }
     var playing by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("اختر القارئ والسورة") }
-    val context = LocalContext.current
     var controller by remember { mutableStateOf<MediaController?>(null) }
     DisposableEffect(context) {
         val token = SessionToken(context, ComponentName(context, QuranPlaybackService::class.java))
@@ -76,7 +82,14 @@ fun QuranAudioScreen() {
                 }
             }
             c.addListener(listener)
-            playing = c.isPlaying
+            val activeId = c.currentMediaItem?.mediaId.orEmpty()
+            val activeReader = readers.indexOfFirst { it.edition == activeId.substringBefore(':') }
+            val activeSurah = activeId.substringAfter(':', "").toIntOrNull()
+            if (activeReader >= 0 && activeSurah != null && activeSurah in 1..114) {
+                readerIndex = activeReader
+                surah = activeSurah
+            }
+            listener.onIsPlayingChanged(c.isPlaying)
             onDispose { c.removeListener(listener) }
         }
     }
@@ -122,6 +135,7 @@ fun QuranAudioScreen() {
         Button(onClick = {
             val reader = readers[readerIndex]
             val c = controller
+            val mediaId = "${reader.edition}:$surah"
             if (c == null) {
                 status = "جارٍ تهيئة المشغل"
             } else if (playing) {
@@ -138,6 +152,7 @@ fun QuranAudioScreen() {
                 val url = "https://cdn.islamic.network/quran/audio-surah/${reader.bitrate}/${reader.edition}/$surah.mp3"
                 c.setMediaItem(
                     MediaItem.Builder()
+                        .setMediaId(mediaId)
                         .setUri(url)
                         .setMediaMetadata(
                             MediaMetadata.Builder()
@@ -145,7 +160,10 @@ fun QuranAudioScreen() {
                                 .setArtist(reader.name)
                                 .setAlbumTitle("إرثي | رحمة — المصحف الصوتي")
                                 .build()
-                        ).build()
+                        ).build(),
+                    if (progress.getString(LAST_RECITATION, null) == mediaId) {
+                        progress.getLong(LAST_POSITION, 0L).coerceAtLeast(0)
+                    } else 0L
                 )
                 c.prepare()
                 c.play()
