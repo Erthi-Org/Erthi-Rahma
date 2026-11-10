@@ -1,0 +1,25 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+*.jks
+*.keystore
+*.apk
+*.aab
+# PHP / Laravel
+/backend/vendor/
+/backend/.env
+/backend/.env.*
+!/backend/.env.example
+/backend/storage/*.key
+# Node
+node_modules/
+.env
+.env.*
+!.env.example
+# OS
+.DS_Store
+Thumbs.db
