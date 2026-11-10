@@ -38,15 +38,15 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MaterialTheme(colorScheme = darkColorScheme(primary = Green, background = Ink, surface = Color(0xFF1A1D1B))) {
                     RahmaApp(onShare = { name, prayer ->
-                        shareObituary(name, prayer)
+                        shareObituary(name, prayer, selectedPhrase)
                     })
                 }
             }
         }
     }
 
-    private fun shareObituary(name: String, prayer: String) {
-        val image = renderObituary(name, prayer)
+    private fun shareObituary(name: String, prayer: String, selectedPhrase: String) {
+        val image = renderObituary(name, prayer, selectedPhrase)
         val folder = File(cacheDir, "shared").apply { mkdirs() }
         val file = File(folder, "obituary.png")
         FileOutputStream(file).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -62,13 +62,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RahmaApp(onShare: (String, String) -> Unit) {
+private fun RahmaApp(onShare: (String, String, String) -> Unit) {
     var page by remember { mutableStateOf(0) }
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { page = 0 }) { Text("النعي") }
-            Button(onClick = { page = 1 }) { Text("المصحف الصوتي") }
-            Button(onClick = { page = 2 }) { Text("أحكام الجنائز") }
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Button(onClick = { page = 0 }) { Text("النعي") } }
+            item { Button(onClick = { page = 1 }) { Text("المصحف الصوتي") } }
+            item { Button(onClick = { page = 2 }) { Text("أحكام الجنائز") } }
         }
         if (page == 1) {
             QuranAudioScreen()
@@ -81,7 +81,7 @@ private fun RahmaApp(onShare: (String, String) -> Unit) {
 }
 
 @Composable
-private fun ObituaryScreen(onShare: (String, String) -> Unit) {
+private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var prayer by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(0) }
@@ -119,13 +119,13 @@ private fun ObituaryScreen(onShare: (String, String) -> Unit) {
                     if (prayer.isNotBlank()) Text(prayer, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
             }
-            Button(onClick = { onShare(name, prayer) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة صورة النعي") }
+            Button(onClick = { onShare(name, prayer, phrases[selected]) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة صورة النعي") }
         }
         Text("المشاركة اختيارية. لا تُرفع البيانات إلى أي خادم.", color = Color.Gray, fontSize = 12.sp)
     }
 }
 
-private fun renderObituary(name: String, prayer: String): Bitmap {
+private fun renderObituary(name: String, prayer: String, selectedPhrase: String): Bitmap {
     val bitmap = Bitmap.createBitmap(1080, 1350, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(AndroidColor.rgb(10, 10, 10))
@@ -143,7 +143,7 @@ private fun renderObituary(name: String, prayer: String): Bitmap {
         canvas.drawText(text, 540f, y, paint)
         paint.textScaleX = 1f
     }
-    line("إنا لله وإنا إليه راجعون", 330f, 56f, true)
+    line(selectedPhrase, 330f, 56f, true)
     line("انتقل إلى رحمة الله تعالى", 510f, 50f)
     line(name, 680f, 70f, true)
     if (prayer.isNotBlank()) {
