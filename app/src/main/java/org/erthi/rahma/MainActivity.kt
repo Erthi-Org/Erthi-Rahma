@@ -64,14 +64,24 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun RahmaApp(onShare: (String, String) -> Unit) {
     var page by remember { mutableStateOf(0) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { page = 0 }) { Text("النعي") }
-        Button(onClick = { page = 1 }) { Text("المصحف الصوتي") }
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { page = 0 }) { Text("النعي") }
+            Button(onClick = { page = 1 }) { Text("المصحف الصوتي") }
+            Button(onClick = { page = 2 }) { Text("أحكام الجنائز") }
+        }
+        if (page == 1) {
+            QuranAudioScreen()
+        } else if (page == 2) {
+            FuneralGuidanceScreen()
+        } else {
+            ObituaryScreen(onShare)
+        }
     }
-    if (page == 1) {
-        QuranAudioScreen()
-        return
-    }
+}
+
+@Composable
+private fun ObituaryScreen(onShare: (String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var prayer by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(0) }
