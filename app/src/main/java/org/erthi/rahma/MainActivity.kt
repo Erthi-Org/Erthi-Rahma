@@ -14,12 +14,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -38,22 +42,28 @@ import java.io.FileOutputStream
 private val Ink = Color(0xFF0A0A0A)
 private val Green = Color(0xFF81B99B)
 
+private enum class ObituaryTemplate(val title: String, val background: Int, val accent: Int) {
+    CLASSIC("الأخضر الهادئ", 0xFF0A0A0A.toInt(), 0xFF81B99B.toInt()),
+    BLUE("الأزرق الليلي", 0xFF101D2E.toInt(), 0xFFA9D2FF.toInt()),
+    GOLD("الذهبي الدافئ", 0xFF251C15.toInt(), 0xFFFFD78B.toInt())
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MaterialTheme(colorScheme = darkColorScheme(primary = Green, background = Ink, surface = Color(0xFF1A1D1B))) {
-                    RahmaApp(onShare = { name, prayer, selectedPhrase ->
-                        shareObituary(name, prayer, selectedPhrase)
+                    RahmaApp(onShare = { name, prayer, selectedPhrase, template ->
+                        shareObituary(name, prayer, selectedPhrase, template)
                     })
                 }
             }
         }
     }
 
-    private fun shareObituary(name: String, prayer: String, selectedPhrase: String) {
-        val image = renderObituary(name, prayer, selectedPhrase)
+    private fun shareObituary(name: String, prayer: String, selectedPhrase: String, template: ObituaryTemplate) {
+        val image = renderObituary(name, prayer, selectedPhrase, template)
         val folder = File(cacheDir, "shared").apply { mkdirs() }
         val file = File(folder, "obituary.png")
         FileOutputStream(file).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -69,10 +79,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RahmaApp(onShare: (String, String, String) -> Unit) {
+private fun RahmaApp(onShare: (String, String, String, ObituaryTemplate) -> Unit) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     BackHandler(enabled = page != 0) { page = 0 }
-    Column {
+    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Button(onClick = { page = 0 }) { Text("النعي") } }
             item { Button(onClick = { page = 1 }) { Text("المصحف الصوتي") } }
@@ -92,10 +102,11 @@ private fun RahmaApp(onShare: (String, String, String) -> Unit) {
 }
 
 @Composable
-private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
+private fun ObituaryScreen(onShare: (String, String, String, ObituaryTemplate) -> Unit) {
     var name by remember { mutableStateOf("") }
     var prayer by remember { mutableStateOf("") }
     var selected by rememberSaveable { mutableStateOf(0) }
+    var template by remember { mutableStateOf(ObituaryTemplate.CLASSIC) }
     var showPreview by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val draftDao = remember(context) { ObituaryDraftDatabase.open(context).drafts() }
@@ -144,19 +155,39 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
         OutlinedTextField(value = prayer, onValueChange = { prayer = it.take(250) },
             label = { Text("مكان وموعد صلاة الجنازة (اختياري)") },
             modifier = Modifier.fillMaxWidth())
+        Text("قالب صورة النعي", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.selectableGroup()) {
+            ObituaryTemplate.entries.forEach { option ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .selectable(
+                            selected = template == option,
+                            role = Role.RadioButton,
+                            onClick = { template = option }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = template == option, onClick = null)
+                    Text(option.title, modifier = Modifier.padding(start = 12.dp))
+                }
+            }
+        }
         Button(onClick = { showPreview = true }, enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
             Text("معاينة النعي")
         }
         if (showPreview && name.isNotBlank()) {
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(template.background), contentColor = Color.White)
+            ) {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(phrases[selected], color = Green, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(phrases[selected], color = Color(template.accent), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Text("انتقل إلى رحمة الله تعالى", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                    Text(name, fontSize = 24.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Text(name, color = Color(template.accent), fontSize = 24.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     if (prayer.isNotBlank()) Text(prayer, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
             }
-            Button(onClick = { onShare(name, prayer, phrases[selected]) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة صورة النعي") }
+            Button(onClick = { onShare(name, prayer, phrases[selected], template) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة صورة النعي") }
         }
         OutlinedButton(
             onClick = {
@@ -175,6 +206,7 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
                 name = ""
                 prayer = ""
                 selected = 0
+                template = ObituaryTemplate.CLASSIC
                 showPreview = false
                 message = ""
             }, enabled = !busy) { Text("مسودة جديدة") }
@@ -191,6 +223,7 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
                             name = draft.name
                             prayer = draft.details
                             selected = draft.phraseIndex.coerceIn(phrases.indices)
+                            template = ObituaryTemplate.CLASSIC
                             showPreview = false
                             message = "فُتحت المسودة للتعديل"
                         }, enabled = !busy) { Text("تعديل") }
@@ -214,6 +247,7 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
                                 name = ""
                                 prayer = ""
                                 selected = 0
+                                template = ObituaryTemplate.CLASSIC
                                 showPreview = false
                             }
                         }
@@ -228,11 +262,11 @@ private fun ObituaryScreen(onShare: (String, String, String) -> Unit) {
     }
 }
 
-private fun renderObituary(name: String, prayer: String, selectedPhrase: String): Bitmap {
+private fun renderObituary(name: String, prayer: String, selectedPhrase: String, template: ObituaryTemplate): Bitmap {
     val width = 1080
     val inset = 70
     val spacing = 48
-    val green = AndroidColor.rgb(129, 185, 155)
+    val accent = template.accent
 
     fun paragraph(text: String, size: Float, color: Int): StaticLayout {
         val paint = TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -247,17 +281,17 @@ private fun renderObituary(name: String, prayer: String, selectedPhrase: String)
     }
 
     val paragraphs = buildList {
-        add(paragraph(selectedPhrase, 56f, green))
+        add(paragraph(selectedPhrase, 56f, accent))
         add(paragraph("انتقل إلى رحمة الله تعالى", 50f, AndroidColor.WHITE))
-        add(paragraph(name, 70f, green))
+        add(paragraph(name, 70f, accent))
         if (prayer.isNotBlank()) add(paragraph(prayer, 40f, AndroidColor.WHITE))
-        add(paragraph("إرثي | رحمة", 32f, green))
+        add(paragraph("إرثي | رحمة", 32f, accent))
     }
     val contentHeight = paragraphs.sumOf { it.height } + spacing * (paragraphs.size - 1)
     val height = maxOf(1350, contentHeight + 2 * inset)
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(AndroidColor.rgb(10, 10, 10))
+    canvas.drawColor(template.background)
     canvas.translate(inset.toFloat(), (height - contentHeight) / 2f)
     for (paragraph in paragraphs) {
         canvas.save()
