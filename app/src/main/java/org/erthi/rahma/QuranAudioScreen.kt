@@ -1,6 +1,10 @@
 package org.erthi.rahma
 
-import android.media.MediaPlayer
+import android.content.ComponentName
+import androidx.media3.common.MediaItem
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.MoreExecutors
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,10 +35,22 @@ fun QuranAudioScreen() {
     var playing by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("اختر القارئ والسورة") }
-    val player = remember { MediaPlayer() }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    val context = LocalContext.current
+    var controller by remember { mutableStateOf<MediaController?>(null) }
+    DisposableEffect(context) {
+        val token = SessionToken(context, ComponentName(context, QuranPlaybackService::class.java))
+        val future = MediaController.Builder(context, token).buildAsync()
+        future.addListener({
+            try { controller = future.get() } catch (_: Exception) { status = "تعذر الاتصال بمشغل الصوت" }
+        }, MoreExecutors.directExecutor())
+        onDispose {
+            controller = null
+            MediaController.releaseFuture(future)
+        }
+    }
     fun stop() {
-        player.reset()
+        controller?.stop()
+        controller?.clearMediaItems()
         playing = false
         paused = false
     }
@@ -73,36 +89,28 @@ fun QuranAudioScreen() {
         }
         Button(onClick = {
             val reader = readers[readerIndex]
-            if (playing) {
-                player.pause()
+            val c = controller
+            if (c == null) {
+                status = "جارٍ تهيئة المشغل"
+            } else if (playing) {
+                c.pause()
                 playing = false
                 paused = true
                 status = "متوقف مؤقتًا"
             } else if (paused) {
-                try {
-                    player.start()
-                    playing = true
-                    paused = false
-                    status = "جارٍ التشغيل"
-                } catch (e: IllegalStateException) {
-                    stop()
-                    status = "تعذر استئناف التلاوة"
-                }
+                c.play()
+                playing = true
+                paused = false
+                status = "جارٍ التشغيل"
             } else if (reader.edition != null) {
-                try {
-                    stop()
-                    status = "جارٍ التحميل..."
-                    val url = "https://cdn.islamic.network/quran/audio-surah/${reader.bitrate}/${reader.edition}/$surah.mp3"
-                    player.setDataSource(url)
-                    player.setOnPreparedListener { it.start(); playing = true; status = "جارٍ التشغيل" }
-                    player.setOnCompletionListener { playing = false; status = "انتهت السورة" }
-                    player.setOnErrorListener { _, _, _ -> playing = false; status = "تعذر تشغيل التلاوة"; true }
-                    player.prepareAsync()
-                } catch (e: Exception) {
-                    status = "تعذر بدء التشغيل"
-                }
+                val url = "https://cdn.islamic.network/quran/audio-surah/${reader.bitrate}/${reader.edition}/$surah.mp3"
+                c.setMediaItem(MediaItem.fromUri(url))
+                c.prepare()
+                c.play()
+                playing = true
+                status = "جارٍ تشغيل السورة"
             }
-        }, enabled = readers[readerIndex].edition != null) {
+        }, enabled = readers[readerIndex].edition != null && controller != null) {
             Text(if (playing) "إيقاف مؤقت" else if (paused) "استئناف التلاوة" else "تشغيل السورة")
         }
         Text(status)
