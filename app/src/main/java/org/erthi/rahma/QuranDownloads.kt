@@ -103,7 +103,7 @@ internal class QuranDownloads(context: Context) {
 
     private companion object {
         val lock = Mutex()
-        const val MAX_FILE_BYTES = 64L * 1024 * 1024
-        const val MAX_TOTAL_BYTES = 256L * 1024 * 1024
+        const val MAX_FILE_BYTES = 512L * 1024 * 1024
+        const val MAX_TOTAL_BYTES = 1024L * 1024 * 1024
     }
 }
