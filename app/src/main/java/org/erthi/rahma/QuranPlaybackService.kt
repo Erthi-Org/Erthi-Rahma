@@ -29,9 +29,7 @@ class QuranPlaybackService : MediaSessionService() {
 
     private fun saveProgress(player: Player) {
         val mediaId = player.currentMediaItem?.mediaId ?: return
-        val (edition, number) = mediaId.split(':', limit = 2).takeIf { it.size == 2 } ?: return
-        if (edition !in setOf("ar.husary", "ar.minshawi", "ar.abdulbasit")) return
-        if ((number.toIntOrNull() ?: 0) !in 1..114) return
+        if (QuranRecording.fromId(mediaId) == null) return
         val position = if (player.playbackState == Player.STATE_ENDED) 0L else player.currentPosition
         quranProgress().edit().putString(LAST_RECITATION, mediaId)
             .putLong(LAST_POSITION, position.coerceAtLeast(0)).apply()
