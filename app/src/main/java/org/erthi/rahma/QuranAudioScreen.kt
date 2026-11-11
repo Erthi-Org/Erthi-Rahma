@@ -1,6 +1,10 @@
 package org.erthi.rahma
 
 import android.content.ComponentName
+import android.net.Uri
+import android.text.format.Formatter
+import java.io.IOException
+import kotlinx.coroutines.launch
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -17,22 +21,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-private data class Reader(val name: String, val edition: String?, val bitrate: Int = 128)
+private data class Reader(val name: String, val edition: String?)
 
 @Composable
 fun QuranAudioScreen() {
     val readers = remember {
         listOf(
-            Reader("محمود خليل الحصري", "ar.husary"),
-            Reader("محمد صديق المنشاوي", "ar.minshawi"),
-            Reader("عبد الباسط عبد الصمد", "ar.abdulbasit", 192),
-            Reader("محمد محمود الطبلاوي", null),
-            Reader("فارس عباد", null),
+            Reader("محمود خليل الحصري", null),
+            Reader("محمد صديق المنشاوي (المجوّد)", "ar.muhammadsiddiqalminshawimujawwad"),
+            Reader("عبد الباسط عبد الصمد", "ar.abdulbasitmurattal"),
+            Reader("محمد محمود الطبلاوي", "ar.mohamedtablawi"),
+            Reader("فارس عباد", "ar.faresabbad"),
             Reader("ماهر المعيقلي", null),
             Reader("السيد سعيد", null)
         )
     }
     val context = LocalContext.current
+    val downloads = remember(context) { QuranDownloads(context) }
+    val scope = rememberCoroutineScope()
+    var transferActive by remember { mutableStateOf(false) }
+    var downloadRevision by remember { mutableIntStateOf(0) }
+    var downloadMessage by remember { mutableStateOf("") }
     val progress = remember(context) { context.quranProgress() }
     val savedId = remember(progress) { progress.getString(LAST_RECITATION, null).orEmpty() }
     var readerIndex by remember {
@@ -99,10 +108,13 @@ fun QuranAudioScreen() {
         playing = false
         paused = false
     }
+    val recording = readers[readerIndex].edition?.let { QuranRecording(it, surah) }
+    val localFile = remember(recording, downloadRevision) { recording?.let(downloads::localFile) }
+    val usedBytes = remember(downloadRevision) { downloads.usedBytes() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("الاستماع إلى القرآن الكريم", style = MaterialTheme.typography.headlineSmall)
-        Text("المصدر: AlQuran.cloud — بث تعليمي دون تنزيل أو إعادة استضافة")
+        Text("المصدر: AlQuran.cloud — استماع وتنزيل شخصي وتعليمي")
         readers.forEachIndexed { index, reader ->
             Row(Modifier.fillMaxWidth()) {
                 RadioButton(selected = readerIndex == index, onClick = {
@@ -135,7 +147,7 @@ fun QuranAudioScreen() {
         Button(onClick = {
             val reader = readers[readerIndex]
             val c = controller
-            val mediaId = "${reader.edition}:$surah"
+            val mediaId = recording?.mediaId.orEmpty()
             if (c == null) {
                 status = "جارٍ تهيئة المشغل"
             } else if (playing) {
@@ -148,12 +160,12 @@ fun QuranAudioScreen() {
                 playing = true
                 paused = false
                 status = "جارٍ التشغيل"
-            } else if (reader.edition != null) {
-                val url = "https://cdn.islamic.network/quran/audio-surah/${reader.bitrate}/${reader.edition}/$surah.mp3"
+            } else if (recording != null) {
+                val uri = localFile?.let(Uri::fromFile) ?: Uri.parse(recording.url)
                 c.setMediaItem(
                     MediaItem.Builder()
                         .setMediaId(mediaId)
-                        .setUri(url)
+                        .setUri(uri)
                         .setMediaMetadata(
                             MediaMetadata.Builder()
                                 .setTitle("سورة ${SurahCatalog.all[surah - 1].name}")
@@ -174,6 +186,33 @@ fun QuranAudioScreen() {
             Text(if (playing) "إيقاف مؤقت" else if (paused) "استئناف التلاوة" else "تشغيل السورة")
         }
         Text(status)
+        if (recording != null) {
+            OutlinedButton(
+                enabled = !transferActive && (localFile == null || !playing && !paused),
+                onClick = {
+                    transferActive = true
+                    downloadMessage = if (localFile == null) "جارٍ تنزيل السورة…" else ""
+                    scope.launch {
+                        try {
+                            if (localFile == null) {
+                                downloads.download(recording)
+                                downloadMessage = "السورة متاحة للاستماع دون إنترنت"
+                            } else {
+                                downloads.delete(recording)
+                                downloadMessage = "حُذف التنزيل من الجهاز"
+                            }
+                            downloadRevision++
+                        } catch (_: IOException) {
+                            downloadMessage = "تعذرت العملية. تحقق من الاتصال والمساحة المتاحة."
+                        } finally {
+                            transferActive = false
+                        }
+                    }
+                }
+            ) { Text(if (localFile == null) "تنزيل السورة" else "حذف تنزيل السورة") }
+        }
+        Text("مساحة التنزيلات: ${Formatter.formatFileSize(context, usedBytes)} من 256 ميبيبايت")
+        if (downloadMessage.isNotEmpty()) Text(downloadMessage)
         Text("التلاوات التي لم تتوفر لها موافقة ومصدر موثوق لا يمكن تشغيلها حاليًا.")
     }
 }
