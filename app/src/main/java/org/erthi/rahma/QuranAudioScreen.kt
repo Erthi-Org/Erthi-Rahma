@@ -45,7 +45,13 @@ fun QuranAudioScreen() {
     val progress = remember(context) { context.quranProgress() }
     val savedId = remember(progress) { progress.getString(LAST_RECITATION, null).orEmpty() }
     var readerIndex by remember {
-        mutableIntStateOf(readers.indexOfFirst { it.edition == savedId.substringBefore(':') }.coerceAtLeast(0))
+        val savedEdition = when (val edition = savedId.substringBefore(':')) {
+            "ar.minshawi" -> "ar.muhammadsiddiqalminshawimujawwad"
+            "ar.abdulbasit" -> "ar.abdulbasitmurattal"
+            else -> edition
+        }
+        val savedReader = readers.indexOfFirst { it.edition == savedEdition }
+        mutableIntStateOf(if (savedReader >= 0) savedReader else readers.indexOfFirst { it.edition != null })
     }
     var surah by remember {
         mutableIntStateOf(savedId.substringAfter(':', "").toIntOrNull()?.takeIf { it in 1..114 } ?: 1)
@@ -211,7 +217,7 @@ fun QuranAudioScreen() {
                 }
             ) { Text(if (localFile == null) "تنزيل السورة" else "حذف تنزيل السورة") }
         }
-        Text("مساحة التنزيلات: ${Formatter.formatFileSize(context, usedBytes)} من 256 ميبيبايت")
+        Text("مساحة التنزيلات: ${Formatter.formatFileSize(context, usedBytes)} من 1 جيبيبايت")
         if (downloadMessage.isNotEmpty()) Text(downloadMessage)
         Text("التلاوات التي لم تتوفر لها موافقة ومصدر موثوق لا يمكن تشغيلها حاليًا.")
     }
