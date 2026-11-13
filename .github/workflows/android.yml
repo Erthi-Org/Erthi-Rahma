@@ -1,7 +1,7 @@
 name: Android Debug APK
 on:
   push:
-    branches: [main, development/foundation, feature/android-obituary-foundation]
+    branches: [main, development/foundation, feature/android-obituary-foundation, feature/stages-03-22]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -15,15 +15,57 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 35
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --stacktrace
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: Erthi-Rahma-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: |
+            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.erthi.rahma.NavigationTest
+            python3 tools/check_process_restart.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Rahma-device-tests-api-${{ matrix.api }}
+          path: app/build/outputs/androidTest-results/connected/
